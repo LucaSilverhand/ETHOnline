@@ -1,2 +1,2 @@
-# ETHOnline
+# Super Wallet
 ETHOnline Hackathon
