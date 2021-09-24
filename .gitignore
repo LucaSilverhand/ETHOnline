@@ -2,3 +2,4 @@
 /coverage
 /.coverage_*
 /reports
+/frontend/node_modules/**
