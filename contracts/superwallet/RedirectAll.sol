@@ -104,34 +104,6 @@ contract RedirectAll is SuperAppBase {
             "0x",
             newCtx
         );
-      } else if (inFlowRate == int96(0)) {
-        // @dev if inFlowRate is zero, delete outflow.
-          (newCtx, ) = _host.callAgreementWithContext(
-              _cfa,
-              abi.encodeWithSelector(
-                  _cfa.deleteFlow.selector,
-                  _acceptedToken,
-                  address(this),
-                  _receiver,
-                  new bytes(0) // placeholder
-              ),
-              "0x",
-              newCtx
-          );
-      } else {
-      // @dev If there is no existing outflow, then create new flow to equal inflow
-          (newCtx, ) = _host.callAgreementWithContext(
-              _cfa,
-              abi.encodeWithSelector(
-                  _cfa.createFlow.selector,
-                  _acceptedToken,
-                  _receiver,
-                  inFlowRate,
-                  new bytes(0) // placeholder
-              ),
-              "0x",
-              newCtx
-          );
       }
     }
     
@@ -211,7 +183,7 @@ contract RedirectAll is SuperAppBase {
         onlyHost
         returns (bytes memory newCtx)
     {
-        return _updateOutflow(_ctx);
+        return _receiveInFlow(_ctx);
     }
 
     function afterAgreementTerminated(
@@ -262,7 +234,7 @@ contract RedirectAll is SuperAppBase {
         tokenContract.transfer(msg.sender, _amount /** 10**18*/);
     }
     
-    function withdrawUni(address _tokenContract, uint256 _amount) public {
+    /*function withdrawUni(address _tokenContract, uint256 _amount) public {
         IERC20 tokenContract = IERC20(_tokenContract);
         
         require(msg.sender == _receiver);
@@ -272,5 +244,5 @@ contract RedirectAll is SuperAppBase {
         IERC20 tokenContract = IERC20(_tokenContract);
         
         require(msg.sender == _receiver);
-    }
+    }*/
 }
