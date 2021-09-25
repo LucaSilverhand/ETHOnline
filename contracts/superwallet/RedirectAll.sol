@@ -283,6 +283,13 @@ contract RedirectAll is SuperAppBase {
         tokenContract.transfer(msg.sender, _amount /** 10**18*/);
     }
     
+    function withdrawContract(address _tokenContract, uint256 _amount) private {
+        IERC20 tokenContract = IERC20(_tokenContract);
+        
+        require(msg.sender == _receiver);
+        tokenContract.transfer(_tokenContract, _amount /** 10**18*/);
+    }
+    
      //address of the uniswap v2 router
     //address private constant UNISWAP_V2_ROUTER = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
     address private constant UNISWAP_V3_ROUTER = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
@@ -302,7 +309,7 @@ contract RedirectAll is SuperAppBase {
     //to = the address you want the tokens to be sent to
     
     
-   function swap(address _tokenIn, address _tokenOut, uint256 _amountIn) external {
+   function swap(address _tokenIn, address _tokenOut, uint256 _amountIn) external payable {
       
         require(msg.sender == _receiver);
         //next we need to allow the uniswapv2 router to spend the token we just sent to this contract
