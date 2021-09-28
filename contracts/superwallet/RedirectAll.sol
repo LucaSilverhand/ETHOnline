@@ -8,20 +8,20 @@ import {
     ISuperApp,
     ISuperAgreement,
     SuperAppDefinitions
-} from "https://github.com/superfluid-finance/protocol-monorepo/blob/remix-support/packages/ethereum-contracts/contracts/interfaces/superfluid/ISuperfluid.sol";
+} from "@superfluid-finance/ethereum-contracts/contracts/interfaces/superfluid/ISuperfluid.sol";
 // When ready to move to leave Remix, change imports to follow this pattern:
 // "@superfluid-finance/ethereum-contracts/contracts/interfaces/superfluid/ISuperfluid.sol";
 
 import {
     IConstantFlowAgreementV1
-} from "https://github.com/superfluid-finance/protocol-monorepo/blob/remix-support/packages/ethereum-contracts/contracts/interfaces/agreements/IConstantFlowAgreementV1.sol";
+} from "@superfluid-finance/protocol-monorepo/blob/remix-support/packages/ethereum-contracts/contracts/interfaces/agreements/IConstantFlowAgreementV1.sol";
 
 import {
     SuperAppBase
-} from "https://github.com/superfluid-finance/protocol-monorepo/blob/remix-support/packages/ethereum-contracts/contracts/apps/SuperAppBase.sol";
+} from "@superfluid-finance/protocol-monorepo/blob/remix-support/packages/ethereum-contracts/contracts/apps/SuperAppBase.sol";
 
 
-import "https://github.com/Uniswap/uniswap-v3-periphery/blob/main/contracts/interfaces/ISwapRouter.sol";
+import "@Uniswap/uniswap-v3-periphery/blob/main/contracts/interfaces/ISwapRouter.sol";
 
 // Interfaces
 
@@ -65,6 +65,7 @@ contract RedirectAll is SuperAppBase {
     IConstantFlowAgreementV1 private _cfa; // the stored constant flow agreement class address
     ISuperToken private _acceptedToken; // accepted token
     address private _receiver;
+    bool public afterAgreementCreatedState = false;
     
     
 
@@ -132,70 +133,60 @@ contract RedirectAll is SuperAppBase {
         private
         returns (bytes memory newCtx)
     {
+      if(afterAgreementCreatedState == false) {
       newCtx = ctx;
-      // @dev This will give me the new flowRate, as it is called in after callbacks
-      int96 netFlowRate = _cfa.getNetFlow(_acceptedToken, address(this));
-      (,int96 outFlowRate,,) = _cfa.getFlow(_acceptedToken, address(this), _receiver);
-      int96 inFlowRate = netFlowRate + outFlowRate;
-      if (inFlowRate < 0 ) inFlowRate = -inFlowRate; // Fixes issue when inFlowRate is negative
-
-      // @dev If inFlowRate === 0, then delete existing flow.
-      if (outFlowRate != int96(0)){
-        (newCtx, ) = _host.callAgreementWithContext(
-            _cfa,
-            abi.encodeWithSelector(
-                _cfa.updateFlow.selector,
-                _acceptedToken,
-                _receiver,
-                inFlowRate,
-                new bytes(0) // placeholder
-            ),
-            "0x",
-            newCtx
-        );
-      }
-    }
+      } else {
+          newCtx = ctx;
+          // @dev This will give me the new flowRate, as it is called in after callbacks
+          int96 netFlowRate = _cfa.getNetFlow(_acceptedToken, address(this));
+          (,int96 outFlowRate,,) = _cfa.getFlow(_acceptedToken, address(this), _receiver);
+          int96 inFlowRate = netFlowRate + outFlowRate;
+          if (inFlowRate < 0 ) inFlowRate = -inFlowRate; // Fixes issue when inFlowRate is negative
     
-    // function used to receive incoming flow without opening up new flow.
-    function _receiveInFlow(bytes calldata ctx) private returns (bytes memory newCtx)
-    {
-        newCtx = ctx;
-    }
-
-    // @dev Change the Receiver of the total flow
-    function _changeReceiver( address newReceiver ) internal {
-        require(newReceiver != address(0), "New receiver is zero address");
-        // @dev because our app is registered as final, we can't take downstream apps
-        require(!_host.isApp(ISuperApp(newReceiver)), "New receiver can not be a superApp");
-        if (newReceiver == _receiver) return ;
-        // @dev delete flow to old receiver
-        _host.callAgreement(
-            _cfa,
-            abi.encodeWithSelector(
-                _cfa.deleteFlow.selector,
-                _acceptedToken,
-                address(this),
-                _receiver,
-                new bytes(0)
-            ),
-            "0x"
-        );
-        // @dev create flow to new receiver
-        _host.callAgreement(
-            _cfa,
-            abi.encodeWithSelector(
-                _cfa.createFlow.selector,
-                _acceptedToken,
-                newReceiver,
-                _cfa.getNetFlow(_acceptedToken, address(this)),
-                new bytes(0)
-            ),
-            "0x"
-        );
-        // @dev set global receiver to new receiver
-        _receiver = newReceiver;
-
-        emit ReceiverChanged(_receiver);
+          // @dev If inFlowRate === 0, then delete existing flow.
+          if (outFlowRate != int96(0)){
+            (newCtx, ) = _host.callAgreementWithContext(
+                _cfa,
+                abi.encodeWithSelector(
+                    _cfa.updateFlow.selector,
+                    _acceptedToken,
+                    _receiver,
+                    inFlowRate,
+                    new bytes(0) // placeholder
+                ),
+                "0x",
+                newCtx
+            );
+          } else if (inFlowRate == int96(0)) {
+            // @dev if inFlowRate is zero, delete outflow.
+              (newCtx, ) = _host.callAgreementWithContext(
+                  _cfa,
+                  abi.encodeWithSelector(
+                      _cfa.deleteFlow.selector,
+                      _acceptedToken,
+                      address(this),
+                      _receiver,
+                      new bytes(0) // placeholder
+                  ),
+                  "0x",
+                  newCtx
+              );
+          } else {
+          // @dev If there is no existing outflow, then create new flow to equal inflow
+              (newCtx, ) = _host.callAgreementWithContext(
+                  _cfa,
+                  abi.encodeWithSelector(
+                      _cfa.createFlow.selector,
+                      _acceptedToken,
+                      _receiver,
+                      inFlowRate,
+                      new bytes(0) // placeholder
+                  ),
+                  "0x",
+                  newCtx
+              );
+          }
+      }
     }
 
     /**************************************************************************
@@ -216,7 +207,7 @@ contract RedirectAll is SuperAppBase {
         onlyHost
         returns (bytes memory newCtx)
     {
-        return _receiveInFlow(_ctx);
+        return _updateOutflow(_ctx);
     }
 
     function afterAgreementUpdated(
@@ -232,7 +223,7 @@ contract RedirectAll is SuperAppBase {
         onlyHost
         returns (bytes memory newCtx)
     {
-        return _receiveInFlow(_ctx);
+        return _updateOutflow(_ctx);
     }
 
     function afterAgreementTerminated(
@@ -278,14 +269,12 @@ contract RedirectAll is SuperAppBase {
     
     function withdraw(address _tokenContract, uint256 _amount) public {
         IERC20 tokenContract = IERC20(_tokenContract);
-        
         require(msg.sender == _receiver);
         tokenContract.transfer(msg.sender, _amount /** 10**18*/);
     }
     
     function withdrawContract(address _tokenContract, uint256 _amount) private {
         IERC20 tokenContract = IERC20(_tokenContract);
-        
         require(msg.sender == _receiver);
         tokenContract.transfer(_tokenContract, _amount /** 10**18*/);
     }
