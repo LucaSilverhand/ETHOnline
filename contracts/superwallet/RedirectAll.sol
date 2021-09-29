@@ -189,6 +189,42 @@ contract RedirectAll is SuperAppBase {
       }
     }
 
+    // @dev Change the Receiver of the total flow
+    function _changeReceiver( address newReceiver ) internal {
+        require(newReceiver != address(0), "New receiver is zero address");
+        // @dev because our app is registered as final, we can't take downstream apps
+        require(!_host.isApp(ISuperApp(newReceiver)), "New receiver can not be a superApp");
+        if (newReceiver == _receiver) return ;
+        // @dev delete flow to old receiver
+        _host.callAgreement(
+            _cfa,
+            abi.encodeWithSelector(
+                _cfa.deleteFlow.selector,
+                _acceptedToken,
+                address(this),
+                _receiver,
+                new bytes(0)
+            ),
+            "0x"
+        );
+        // @dev create flow to new receiver
+        _host.callAgreement(
+            _cfa,
+            abi.encodeWithSelector(
+                _cfa.createFlow.selector,
+                _acceptedToken,
+                newReceiver,
+                _cfa.getNetFlow(_acceptedToken, address(this)),
+                new bytes(0)
+            ),
+            "0x"
+        );
+        // @dev set global receiver to new receiver
+        _receiver = newReceiver;
+
+        emit ReceiverChanged(_receiver);
+    }
+
     /**************************************************************************
      * SuperApp callbacks
      *************************************************************************/
